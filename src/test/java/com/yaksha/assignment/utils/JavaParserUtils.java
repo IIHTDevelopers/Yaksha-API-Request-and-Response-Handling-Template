@@ -5,10 +5,13 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
-
 import com.github.javaparser.JavaParser;
 import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.body.Parameter;
+
+import java.util.List;
 
 public class JavaParserUtils {
 
@@ -31,11 +34,15 @@ public class JavaParserUtils {
 	 * @throws IOException
 	 */
 	public static boolean checkControllerStructure(String filePath, String classAnnotations, String methodName,
-			String methodAnnotations, String paramName, String expectedReturnType) {
+        String methodAnnotations, String paramName, String expectedReturnType) {
+
+		System.out.println("Starting controller structure validation...");
+
 		// Load class file as String from file path
 		String classContent;
 		try {
 			classContent = loadClassContent(filePath);
+			System.out.println("Successfully loaded class file from path: " + filePath);
 		} catch (IOException e) {
 			System.out.println("Error: Unable to read the class file from path: " + filePath);
 			return false;
@@ -52,34 +59,58 @@ public class JavaParserUtils {
 		}
 
 		CompilationUnit compilationUnit = optionalCompilationUnit.get();
+		System.out.println("Class file parsed successfully.");
 
 		// Check if the class has the required annotations
-		boolean hasClassAnnotation = compilationUnit.getClassByName("AppController").get().getAnnotations().stream()
+		Optional<ClassOrInterfaceDeclaration> classOpt = compilationUnit.getClassByName("AppController");
+		if (classOpt.isEmpty()) {
+			System.out.println("Error: The class 'AppController' does not exist.");
+			return false;
+		}
+
+		ClassOrInterfaceDeclaration classDecl = classOpt.get();
+		boolean hasClassAnnotation = classDecl.getAnnotations().stream()
 				.anyMatch(annotation -> annotation.getNameAsString().equals(classAnnotations));
 
 		if (!hasClassAnnotation) {
 			System.out.println("Error: The class is missing the @" + classAnnotations + " annotation. Please add it.");
 			return false;
+		} else {
+			System.out.println("Success: The class contains the @" + classAnnotations + " annotation.");
 		}
 
-		// Check if the method has the required annotations
-		MethodDeclaration method = compilationUnit.getClassByName("AppController").get().getMethodsByName(methodName)
-				.get(0);
+		// Check if the method exists and has the required annotations
+		List<MethodDeclaration> methods = classDecl.getMethodsByName(methodName);
+		if (methods.isEmpty()) {
+			System.out.println("Error: The method '" + methodName + "' does not exist.");
+			return false;
+		}
+
+		MethodDeclaration method = methods.get(0); // Safe from IndexOutOfBoundsException now
 
 		boolean hasMethodAnnotation = method.getAnnotationByName(methodAnnotations).isPresent();
 		if (!hasMethodAnnotation) {
 			System.out.println("Error: The method " + methodName + " is missing the @" + methodAnnotations
 					+ " annotation. Please add it.");
 			return false;
+		} else {
+			System.out.println("Success: The method " + methodName + " contains the @" + methodAnnotations + " annotation.");
 		}
 
 		// Check if the method's parameter has the required annotation
-		boolean hasParamAnnotation = method.getParameterByName(paramName).get().getAnnotationByName("RequestParam")
-				.isPresent();
-		if (!hasParamAnnotation) {
-			System.out.println(
-					"Error: The parameter " + paramName + " is missing the @RequestParam annotation. Please add it.");
+		Optional<Parameter> paramOpt = method.getParameterByName(paramName);
+		if (paramOpt.isEmpty()) {
+			System.out.println("Error: The parameter '" + paramName + "' does not exist in the method.");
 			return false;
+		}
+
+		Parameter param = paramOpt.get();
+		boolean hasParamAnnotation = param.getAnnotationByName("RequestParam").isPresent();
+		if (!hasParamAnnotation) {
+			System.out.println("Error: The parameter " + paramName + " is missing the @RequestParam annotation. Please add it.");
+			return false;
+		} else {
+			System.out.println("Success: The parameter " + paramName + " contains the @RequestParam annotation.");
 		}
 
 		// Check if the return type matches the expected type
@@ -88,9 +119,12 @@ public class JavaParserUtils {
 			System.out.println("Error: The return type of the method " + methodName + " is not " + expectedReturnType
 					+ ". Please correct it.");
 			return false;
+		} else {
+			System.out.println("Success: The return type of the method " + methodName + " is correct.");
 		}
 
-		// If all checks pass
+		System.out.println("All checks passed successfully!");
+
 		return true;
 	}
 
